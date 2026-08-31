@@ -21,3 +21,13 @@ cabal.project.local
 cabal.project.local~
 .HTF/
 .ghc.environment.*
+hclean
+dist-newstyle/
+build/
+
+# agentics
+.claude
+CLAUDE.md
+AGENTS.md
+REVIEW.md
+

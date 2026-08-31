@@ -1,0 +1,74 @@
+cabal-version:      2.4
+name:               hclean
+version:            0.1.0.0
+synopsis:           Safely remove development detritus matching glob patterns
+description:
+  A dependency-free command line utility for recursively removing build
+  artifacts, caches and other development detritus. The @hclean@ library
+  provides globbing, scanning, reporting and deletion; the @hclean@
+  executable is a thin command line front end over it.
+license:            MIT
+license-file:       LICENSE
+author:             Shakeeb Alireza
+maintainer:         shakfu@users.noreply.github.com
+copyright:          (c) 2026 Shakeeb Alireza
+category:           System
+build-type:         Simple
+extra-doc-files:    README.md
+                    CHANGELOG.md
+
+common shared
+  default-language: Haskell2010
+  ghc-options:      -Wall -Wcompat -Wincomplete-record-updates -O2
+
+library
+  import:           shared
+  hs-source-dirs:   src
+  exposed-modules:  HClean
+                    HClean.Config
+                    HClean.Delete
+                    HClean.Glob
+                    HClean.Preset
+                    HClean.Report
+                    HClean.Scan
+                    HClean.Types
+                    HClean.Util
+  build-depends:    base       >=4.14 && <5
+                  , directory  >=1.3  && <1.4
+                  , filepath   >=1.4  && <1.6
+                  , time       >=1.9  && <1.15
+                  , unix       >=2.7  && <2.9
+
+executable hclean
+  import:           shared
+  hs-source-dirs:   app
+  main-is:          Main.hs
+  other-modules:    CLI
+                    Progress
+  ghc-options:      -threaded
+  build-depends:    base       >=4.14 && <5
+                  , hclean
+                  , directory  >=1.3  && <1.4
+                  , filepath   >=1.4  && <1.6
+
+test-suite hclean-test
+  import:           shared
+  type:             exitcode-stdio-1.0
+  hs-source-dirs:   test app
+  main-is:          Main.hs
+  other-modules:    CLI
+                    Progress
+                    CLISpec
+                    ConfigSpec
+                    GlobSpec
+                    Harness
+                    PresetSpec
+                    ProgressSpec
+                    ReportSpec
+                    ScanSpec
+                    UtilSpec
+  build-depends:    base       >=4.14 && <5
+                  , hclean
+                  , directory  >=1.3  && <1.4
+                  , filepath   >=1.4  && <1.6
+                  , unix       >=2.7  && <2.9
