@@ -1,6 +1,6 @@
 module PresetSpec (tests) where
 
-import Data.List (nub)
+import Data.List (isInfixOf, nub)
 
 import HClean.Preset
 import HClean.Types (Options (..), defaultOptions)
@@ -41,4 +41,8 @@ tests = group "HClean.Preset"
       assertEqual "preset only"
         ["**/target"]
         (resolvePatterns defaultOptions { optPresets = ["rust"] })
+  , it "keeps shell and REPL history out of every preset" $
+      assertEqual "history patterns"
+        []
+        (filter ("history" `isInfixOf`) (expandPresets ["all"]))
   ]

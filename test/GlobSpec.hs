@@ -1,5 +1,7 @@
 module GlobSpec (tests) where
 
+import Data.Time.Clock.POSIX (getPOSIXTime)
+
 import HClean.Glob (globMatch, validGlob)
 import Harness
 
@@ -17,6 +19,8 @@ tests = group "HClean.Glob"
       assertBool "one level" (globMatch "**/__pycache__" "a/__pycache__")
       assertBool "many levels" (globMatch "**/__pycache__" "a/b/c/__pycache__")
       assertBool "suffix must match" (not (globMatch "**/__pycache__" "a/__pycache__/b"))
+      assertBool "middle" (globMatch "a/**/z" "a/b/c/z")
+      assertBool "middle, zero segments" (globMatch "a/**/z" "a/z")
   , it "matches ? against exactly one character" $ do
       assertBool "one" (globMatch "a?c.txt" "a-c.txt")
       assertBool "not zero" (not (globMatch "a?c.txt" "ac.txt"))
@@ -41,4 +45,13 @@ tests = group "HClean.Glob"
       assertBool "empty class" (validGlob "[]]")
       assertBool "no class" (validGlob "**/*.log")
       assertBool "unterminated" (not (validGlob "[abc.txt"))
+      assertBool "empty class" (not (validGlob "x[]y"))
+      assertBool "negated empty class" (not (validGlob "[!]"))
+  , it "matches pathological patterns in polynomial time" $ do
+      let pat = concat (replicate 14 "*a") ++ "*b"
+          path = replicate 200 'a' ++ "c"
+      start <- getPOSIXTime
+      assertBool "no match" (not (globMatch pat path))
+      end <- getPOSIXTime
+      assertBool "fast" (end - start < 1)
   ]

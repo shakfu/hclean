@@ -12,7 +12,7 @@ module CLI
 
 import Data.List (isPrefixOf)
 
-import HClean.Config (ConfigSource (..))
+import HClean.Config (ConfigSource (..), configFileName)
 import Progress (ProgressMode (..))
 import HClean.Preset (presetNames)
 import HClean.Types (Options (..), OutputFormat (..), defaultOptions)
@@ -59,8 +59,8 @@ parseArgs = go defaultInvocation
       "--list"                    -> command ListPatterns
       "-w"                        -> command WriteConfig
       "--write-configfile"        -> command WriteConfig
-      "-p"                        -> withValue (\v o -> o { optRoot = v })
-      "--path"                    -> withValue (\v o -> o { optRoot = v })
+      "-p"                        -> withValue (\v o -> o { optRoot = Just v })
+      "--path"                    -> withValue (\v o -> o { optRoot = Just v })
       "-g"                        -> withValue (\v o -> o { optIncludes = optIncludes o ++ [v] })
       "--glob"                    -> withValue (\v o -> o { optIncludes = optIncludes o ++ [v] })
       "-e"                        -> withValue (\v o -> o { optExcludes = optExcludes o ++ [v] })
@@ -150,7 +150,7 @@ helpText = unlines
   , "  -P, --progress                Always report progress, terminal or not"
   , "      --no-progress             Never show the activity indicator"
   , "  -l, --list                    List patterns"
-  , "  -w, --write-configfile        Write .rclean.toml"
+  , "  -w, --write-configfile        Write " ++ configFileName ++ " in --path"
   , "  -h, --help                    Show this help"
   , "      --version                 Show version"
   ]

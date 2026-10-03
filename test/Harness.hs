@@ -9,14 +9,17 @@ module Harness
   , assertBool
   , assertFailure
   , withTree
+  , withHome
+  , withEnv
   ) where
 
-import Control.Exception (IOException, SomeException, bracket, displayException, fromException, try)
+import Control.Exception (IOException, SomeException, bracket, displayException, finally, fromException, try)
 import Control.Monad (forM_, unless)
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List (isSuffixOf)
 import System.Directory
   (createDirectoryIfMissing, doesPathExist, getTemporaryDirectory, removePathForcibly)
+import System.Environment (lookupEnv, setEnv, unsetEnv)
 import System.Exit (exitFailure)
 import System.FilePath ((</>), takeDirectory)
 import System.IO.Error (ioeGetErrorString, isUserError)
@@ -101,3 +104,15 @@ withTree entries action = bracket create removePathForcibly action
     freshName (c : cs) = do
       taken <- doesPathExist c
       if taken then freshName cs else pure c
+
+-- | Run with @HOME@ set to @home@, restoring it afterwards.
+withHome :: FilePath -> IO a -> IO a
+withHome home = withEnv "HOME" (Just home)
+
+-- | Run with the variable set, or unset for 'Nothing', restoring it afterwards.
+withEnv :: String -> Maybe String -> IO a -> IO a
+withEnv name value action = do
+  saved <- lookupEnv name
+  (assign value >> action) `finally` assign saved
+  where
+    assign = maybe (unsetEnv name) (setEnv name)

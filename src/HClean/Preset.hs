@@ -32,12 +32,11 @@ lookupPreset = byName . map toLower
 
 byName :: String -> Maybe [String]
 byName "common" =
-  Just [ "**/.DS_Store", "**/.bash_history", "**/.python_history"
-       , "**/Thumbs.db", "**/*.swp", "**/*.swo" ]
+  Just ["**/.DS_Store", "**/Thumbs.db", "**/*.swp", "**/*.swo"]
 byName "python" =
   Just [ "**/__pycache__", "**/.coverage", "**/.mypy_cache", "**/.pylint_cache"
        , "**/.pytest_cache", "**/.ruff_cache", "**/.rumdl_cache", "**/.pyscn"
-       , "**/.ropeproject", "**/.python_history", "**/pip-log.txt"
+       , "**/.ropeproject", "**/pip-log.txt"
        , "**/*.pyc", "**/*.pyo" ]
 byName "node" =
   Just [ "**/node_modules", "**/.next", "**/.nuxt", "**/.cache", "**/dist"

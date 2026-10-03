@@ -3,7 +3,9 @@ module Main (main) where
 
 import qualified CLISpec
 import qualified ConfigSpec
+import qualified DeleteSpec
 import qualified GlobSpec
+import qualified MainSpec
 import qualified PresetSpec
 import qualified ProgressSpec
 import qualified ReportSpec
@@ -21,5 +23,7 @@ main = runSuite
   , ReportSpec.tests
   , ConfigSpec.tests
   , ScanSpec.tests
+  , DeleteSpec.tests
   , CLISpec.tests
+  , MainSpec.tests
   ]

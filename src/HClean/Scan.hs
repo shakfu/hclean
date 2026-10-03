@@ -18,13 +18,14 @@ import Data.List (intercalate, sort)
 import Data.Maybe (fromMaybe, listToMaybe)
 import Data.Time.Clock.POSIX (getPOSIXTime)
 import System.Directory (doesFileExist, doesPathExist, listDirectory)
-import System.FilePath ((</>), normalise, splitDirectories, takeDirectory, takeFileName)
+import System.FilePath ((</>), normalise, splitDirectories, takeDirectory)
 import System.Posix.Files
   (FileStatus, fileSize, getSymbolicLinkStatus, isDirectory, isSymbolicLink, modificationTime)
 
 import HClean.Glob (globMatch)
 import HClean.Preset (protectedNames)
 import HClean.Types (Options (..), Target (..))
+import HClean.Util (ancestorsBelowHome)
 
 -- | Directories that only count as build output when a matching project marker
 -- sits next to them.
@@ -68,15 +69,18 @@ isOlderThan (Just n) s = do
   let modified = round (realToFrac (modificationTime s) :: Double)
   pure (now - modified >= n)
 
--- | Whether @path@ (named @name@) is build output of a git-tracked project.
+-- | Whether @path@ (named @name@) is build output of a git-tracked project:
+-- its marker sits beside it, and a @.git@ sits beside it or in an ancestor
+-- below the home directory. Workspace members such as @crates\/foo\/target@
+-- qualify; a home directory kept under git does not claim every project.
 isBuildArtifact :: FilePath -> FilePath -> IO Bool
 isBuildArtifact path name = do
   let parent = takeDirectory path
       markers = fromMaybe [] (lookup name buildArtifactMarkers)
-  inGitRepo <- doesPathExist (parent </> ".git")
-  if not inGitRepo
-    then pure False
-    else not . null <$> filterM (doesFileExist . (parent </>)) markers
+  marked <- not . null <$> filterM (doesFileExist . (parent </>)) markers
+  if marked
+    then not . null <$> (filterM (doesPathExist . (</> ".git")) =<< ancestorsBelowHome parent)
+    else pure False
 
 -- | Callbacks a front end can use to report progress while scanning.
 data ScanHooks = ScanHooks
@@ -98,26 +102,27 @@ scan = scanWith silentHooks
 
 -- | 'scan', reporting each visited entry and each match to the given hooks.
 scanWith :: ScanHooks -> Options -> FilePath -> [String] -> IO [Target]
-scanWith hooks o base patterns = walk base
+scanWith hooks o base patterns = walk base ""
   where
     found t = onMatch hooks t >> pure [t]
 
-    excluded p = any (`globMatch` relativeTo base p) (optExcludes o)
-    protected p = not (optNoProtect o) && takeFileName p `elem` protectedNames
+    excluded rel = any (`globMatch` rel) (optExcludes o)
+    protected name = not (optNoProtect o) && name `elem` protectedNames
 
-    walk dir = do
+    -- @rel@ is built up during the walk, so it is right for a relative @base@.
+    walk dir relDir = do
       entries <- listDirectory dir `catchIO` const (pure [])
-      concat <$> forM (sort entries) (visit dir)
+      concat <$> forM (sort entries) (visit dir relDir)
 
-    visit dir name = do
+    visit dir relDir name = do
       let path = dir </> name
-          rel = relativeTo base path
+          rel = if null relDir then name else relDir ++ "/" ++ name
       onVisit hooks path
       mstatus <- symlinkStatus path
       case mstatus of
         Nothing -> pure []
         Just s
-          | excluded path || protected path -> pure []
+          | excluded rel || protected name -> pure []
           | otherwise -> do
               let link = isSymbolicLink s
                   isDir = isDirectory s
@@ -128,11 +133,13 @@ scanWith hooks o base patterns = walk base
               if | link && not (optSymlinks o) && not (optBrokenSymlinks o) ->
                      pure []
                  | link && optBrokenSymlinks o && not intact ->
-                     found (Target path False "broken-symlink" (fromIntegral (fileSize s)))
+                     if old
+                       then found (Target path False "broken-symlink" (fromIntegral (fileSize s)))
+                       else pure []
                  | matched && (not link || optSymlinks o) ->
                      found (Target path isDir (reason artifact rel) (if isDir then 0 else fromIntegral (fileSize s)))
                  | isDir && not link ->
-                     walk path
+                     walk path rel
                  | otherwise ->
                      pure []
 

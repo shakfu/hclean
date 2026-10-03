@@ -5,6 +5,103 @@ All notable changes to hclean are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Fixes backported from [oclean](https://github.com/shakfu/oclean), each with a
+regression test.
+
+### Added
+
+- After removal, a `Removed N item(s), SIZE.` line reports the bytes freed, and
+  JSON `summary` carries `freed_size` and `freed_size_human`. A target's bytes
+  are its size before removal minus what a failed removal left, so the figure
+  excludes failures and `removePathForcibly` still clears read-only
+  subdirectories. This costs one walk per removed target.
+
+### Fixed
+
+- `-w` checked for the file and then wrote it, so a dangling symlink named
+  `.hclean.toml` was followed and its target created. The file is now created
+  with `O_EXCL`, which refuses any existing path.
+- A failed removal aborted the run: later targets were left in place and a
+  `HasCallStack` backtrace was printed. hclean now removes what it can, names
+  each failure on stderr or in the JSON `failures` array (previously always
+  empty), and exits 1.
+- A file name that is not valid UTF-8 threw `commitBuffer: invalid argument`
+  part-way through the listing. stdout and stderr now use the file system
+  encoding, which writes such names back as their original bytes.
+- Bare `-c` never searched above the working directory. Discovery started from
+  `.`, and `takeDirectory "."` is `.`, so it went straight to the global file.
+- `-B` required `.git` beside the build directory, so workspace members such as
+  `crates/foo/target` never matched. A `.git` in an ancestor now qualifies,
+  up to but not including the home directory: a home directory kept under git
+  (dotfiles) would otherwise have qualified every project beneath it.
+- `-r` ignored `--older-than` and removed dangling links of any age.
+- `-l` ignored `--glob` and printed the defaults.
+- The confirmation prompt went to stdout, which corrupted JSON output, and under
+  `-q` it asked about a list it had not shown. It now goes to stderr and states
+  the count: `Delete N item(s)? [y/N]`. End of input answers no instead of
+  throwing.
+- Config keys were matched by prefix, so `path_style = "x"` set `path`. Inline
+  comments became part of the value, and a value of the wrong type was read as
+  false or empty. Keys now match exactly, `#` comments are stripped, reading
+  stops at the first table header, and type errors are reported. Literal
+  (`'...'`) strings and the escapes `\"`, `\\`, `\n`, `\t`, `\r` are accepted.
+- `--path` could not override a config file's `path`, because an explicit
+  `--path .` was indistinguishable from the default. `optRoot` is now a
+  `Maybe FilePath`.
+- Glob matching was exponential in the number of `*`: `*a` x14 then `*b`
+  against a 201-character name ran past 10 s, and now takes 20 ms.
+- `x[]y` and `[!]` were accepted and matched nothing. They are now rejected.
+  Excludes were not validated at all, so an exclude with a broken class
+  silently protected nothing; they are now checked like includes.
+- Every run measured matched directories, a second walk of each match. Sizes
+  are now measured only for `--stats` and JSON output.
+- `scan` with a relative base dropped leading segments from relative paths
+  (`relativeTo "." "./foo/bar"` is `bar`), so anchored patterns and excludes
+  failed for library callers. Relative paths are now built during the walk.
+
+- `make` failed when a GHC environment file (`~/.ghc/<arch>-<os>-<ver>/environments/default`)
+  hid `directory` or `filepath`, though `cabal build` succeeded. The Makefile
+  now ignores environment files and exposes only the five `build-depends`
+  packages, so an import missing from `hclean.cabal` fails under `make` too.
+
+### Changed
+
+- The config file is `.hclean.toml`, and the global file is
+  `hclean/config.toml` under the XDG config directory. hclean read rclean's
+  `.rclean.toml`, which rclean 0.5 no longer uses; a name of its own keeps
+  hclean from reading a file written for another tool. Rename existing files.
+- The global config file honours `XDG_CONFIG_HOME`: it is
+  `$XDG_CONFIG_HOME/hclean/config.toml` when that is absolute, else
+  `~/.config/hclean/config.toml` as before.
+- The `common` and `python` presets, and so the defaults, no longer include
+  `.bash_history` or `.python_history`. Shell and REPL history is user data
+  that nothing rebuilds; remove it with `-g '**/.bash_history'` if wanted.
+- A relative `path` in a config file is resolved against the file's
+  directory, not the working directory. Before, `path = "."` in a discovered
+  `.hclean.toml` scanned whichever subdirectory hclean ran from. The global
+  file keeps resolving against the working directory, since a `path = "."`
+  there would otherwise always scan `~/.config/hclean`.
+- Bare `-c` no longer reads a `.hclean.toml` in the home directory or above it.
+  With the file-relative `path` above, a `~/.hclean.toml` holding
+  `path = "."` would have scanned all of `~` from any directory under it that
+  has no closer `.hclean.toml`.
+- `-w` writes `.hclean.toml` into `--path` instead of the working directory, and
+  fails with `invalid path` when that is not a directory.
+- Every fatal message starts with `hclean: `. I/O errors that reach the top
+  level are caught and printed the same way. GHC 9.6 already prints them so;
+  GHC 9.10 and later would add a backtrace.
+- Library API: `resolveConfig` and `applyConfig` return `Either String
+  Options`; `summarize` takes a flag saying whether to measure directories;
+  `renderJson` takes the failures and the bytes freed; `removeTargets` takes a
+  per-target action and returns the failures and the bytes freed; `removePath`
+  returns the error instead of throwing.
+- The test suite goes from 74 to 114 tests. `test/MainSpec.hs` drives the built
+  binary, which cabal puts on `PATH` through `build-tool-depends`.
+- CI runs `make test` and `make` on Linux and macOS. Linux runs the non-UTF-8
+  file name test, which APFS cannot host.
+
 ## [0.1.0] - 2026-08-31
 
 First release: a dependency-free Haskell port of `rclean` that recursively

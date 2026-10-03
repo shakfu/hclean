@@ -4,45 +4,77 @@ module HClean.Glob
   , validGlob
   ) where
 
-import Data.List (isPrefixOf)
+import Data.Maybe (isJust)
 import System.FilePath (splitDirectories, takeFileName)
+
+-- | One path segment of a parsed pattern.
+data Segment = Globstar | Atoms [Atom]
+
+-- | One unit of a segment pattern.
+data Atom = Literal Char | AnyChar | Star | Class (Char -> Bool)
 
 -- | Match a glob against a relative path.
 --
 -- A pattern without a slash is matched against the basename only, which gives
 -- the same convenient semantics as the Rust @globset@ crate used by rclean.
 -- @**@ matches any number of path segments; within a segment @*@ matches any
--- run of characters and @?@ matches one.
+-- run of characters and @?@ matches one. An invalid pattern matches nothing.
 globMatch :: String -> String -> Bool
-globMatch pat path = any (matchSegments patternSegments) candidates
+globMatch pat path = maybe False (`matchSegments` candidate) (parseGlob pat)
   where
-    patternSegments = splitDirectories (map slash pat)
-    candidates
-      | '/' `notElem` pat = [[takeFileName path]]
-      | otherwise         = [splitDirectories (map slash path)]
+    candidate
+      | '/' `notElem` map slash pat = [takeFileName path]
+      | otherwise                   = splitDirectories (map slash path)
 
-    slash c = if c == '\\' then '/' else c
+-- | Reject patterns with an unterminated or empty character class.
+validGlob :: String -> Bool
+validGlob = isJust . parseGlob
 
-    matchSegments [] [] = True
-    matchSegments ("**" : ps) xs =
-      matchSegments ps xs || case xs of
-        []      -> False
-        (_: ys) -> matchSegments ("**" : ps) ys
-    matchSegments (p : ps) (x : xs) = matchSegment p x && matchSegments ps xs
-    matchSegments _ _ = False
+slash :: Char -> Char
+slash c = if c == '\\' then '/' else c
 
-    matchSegment [] [] = True
-    matchSegment ('*' : ps) xs = any (matchSegment ps) (suffixes xs)
-    matchSegment ('?' : ps) (_ : xs) = matchSegment ps xs
-    matchSegment ('[' : ps) (x : xs) = case parseClass ps of
-      Nothing            -> False  -- unterminated class matches nothing
-      Just (member, ps') -> member x && matchSegment ps' xs
-    matchSegment (p : ps) (x : xs) = p == x && matchSegment ps xs
-    matchSegment _ _ = False
+parseGlob :: String -> Maybe [Segment]
+parseGlob = mapM segment . splitDirectories . map slash
+  where
+    segment "**" = Just Globstar
+    segment s    = Atoms <$> atoms s
 
-    suffixes xs = xs : case xs of
-      []      -> []
-      (_: ys) -> suffixes ys
+    atoms [] = Just []
+    atoms ('*' : xs) = (Star :) <$> atoms (dropWhile (== '*') xs)
+    atoms ('?' : xs) = (AnyChar :) <$> atoms xs
+    atoms ('[' : xs) = do
+      (member, rest) <- parseClass xs
+      (Class member :) <$> atoms rest
+    atoms (c : xs) = (Literal c :) <$> atoms xs
+
+matchSegments :: [Segment] -> [String] -> Bool
+matchSegments = backtrack isGlobstar step
+  where
+    isGlobstar Globstar = True
+    isGlobstar _        = False
+    step (Atoms as) x = backtrack isStar matchAtom as x
+    step Globstar _   = False
+
+    isStar Star = True
+    isStar _    = False
+    matchAtom (Literal c) x = c == x
+    matchAtom AnyChar _     = True
+    matchAtom (Class m) x   = m x
+    matchAtom Star _        = False
+
+-- | Wildcard matching in which every non-wildcard item consumes exactly one
+-- subject item. Only the most recent wildcard is retried, which is
+-- sufficient here and keeps the cost at O(pattern * subject).
+backtrack :: (p -> Bool) -> (p -> x -> Bool) -> [p] -> [x] -> Bool
+backtrack isWild step = go Nothing
+  where
+    go _ (p : ps) xs
+      | isWild p = go (Just (ps, xs)) ps xs
+    go _ [] [] = True
+    go restart (p : ps) (x : xs)
+      | step p x = go restart ps xs
+    go (Just (rps, _ : rxs)) _ _ = go (Just (rps, rxs)) rps rxs
+    go _ _ _ = False
 
 -- | One entry of a character class.
 data ClassItem = Single Char | Range Char Char
@@ -69,11 +101,3 @@ parseClass body = case body of
 
     matches c (Single x)     = c == x
     matches c (Range lo hi)  = lo <= c && c <= hi
-
--- | Reject patterns with an unterminated character class.
-validGlob :: String -> Bool
-validGlob = balanced
-  where
-    balanced []         = True
-    balanced ('[' : xs) = "]" `isPrefixOf` xs || (']' `elem` xs && balanced xs)
-    balanced (_ : xs)   = balanced xs

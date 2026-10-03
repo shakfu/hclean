@@ -2,6 +2,7 @@ module ScanSpec (tests) where
 
 import Data.IORef (modifyIORef', newIORef, readIORef)
 import Data.List (sort)
+import System.Directory (withCurrentDirectory)
 import System.FilePath ((</>))
 import System.Posix.Files (createSymbolicLink, setFileTimes)
 
@@ -90,6 +91,12 @@ tests = group "HClean.Scan"
         assertEqual "only the dangling one"
           [("proj/dangling", "broken-symlink")]
           =<< matches defaultOptions { optBrokenSymlinks = True } root ["**/nothing"]
+  , it "applies the age limit to broken symlinks" $
+      withTree project $ \root -> do
+        createSymbolicLink (root </> "proj" </> "nowhere") (root </> "proj" </> "dangling")
+        assertEqual "too new"
+          []
+          =<< matches defaultOptions { optBrokenSymlinks = True, optOlderThan = Just 3600 } root ["**/nothing"]
   , it "detects build artifacts next to a project marker" $
       withTree (project ++ [("proj/.git/HEAD", "ref"), ("plain/dist/x.js", "x")]) $ \root ->
         assertEqual "dist only inside the repo"
@@ -100,6 +107,32 @@ tests = group "HClean.Scan"
         assertEqual "no Cargo.toml, no match"
           []
           =<< matches defaultOptions { optArtifacts = True } root ["**/nothing"]
+  , it "finds build artifacts of workspace members" $
+      withTree [ ("ws/.git/HEAD", "ref"), ("ws/Cargo.toml", ""), ("ws/target/x", "")
+               , ("ws/crates/foo/Cargo.toml", ""), ("ws/crates/foo/target/y", "") ] $ \root ->
+        assertEqual "root and member"
+          [("ws/crates/foo/target", "build-artifact"), ("ws/target", "build-artifact")]
+          =<< matches defaultOptions { optArtifacts = True } root ["**/nothing"]
+  , it "ignores a .git in or above the home directory" $
+      withTree [ ("home/.git/HEAD", "ref"), ("home/proj/CMakeLists.txt", "")
+               , ("home/proj/build/x.o", "") ] $ \root ->
+        withHome (root </> "home") $
+          assertEqual "dotfiles repository does not count"
+            []
+            =<< matches defaultOptions { optArtifacts = True } root ["**/nothing"]
+  , it "finds a .git between the artifact and the home directory" $
+      withTree [ ("home/.git/HEAD", "ref"), ("home/ws/.git/HEAD", "ref"), ("home/ws/Cargo.toml", "")
+               , ("home/ws/crates/foo/Cargo.toml", ""), ("home/ws/crates/foo/target/y", "") ] $ \root ->
+        withHome (root </> "home") $
+          assertEqual "workspace member"
+            [("home/ws/crates/foo/target", "build-artifact")]
+            =<< matches defaultOptions { optArtifacts = True } root ["**/nothing"]
+  , it "matches paths relative to a relative base" $
+      withTree [("foo/bar/x.pyc", "1")] $ \root -> withCurrentDirectory root $ do
+        ts <- scan defaultOptions "." ["foo/bar/*.pyc"]
+        assertEqual "anchored pattern" ["./foo/bar/x.pyc"] (map targetPath ts)
+        excluded <- scan defaultOptions { optExcludes = ["foo/bar"] } "." ["**/*.pyc"]
+        assertEqual "anchored exclude" [] (map targetPath excluded)
   , it "terminates on symlink loops" $
       withTree [("a/b/x.pyc", "1")] $ \root -> do
         createSymbolicLink (root </> "a") (root </> "a" </> "b" </> "loop")

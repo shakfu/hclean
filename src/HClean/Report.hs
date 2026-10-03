@@ -5,11 +5,13 @@ module HClean.Report
   , summarize
   , renderText
   , renderJson
+  , renderRemoved
   , formatSize
   ) where
 
 import Control.Monad (forM)
 import Data.List (intercalate, nub)
+import HClean.Delete (Failure (..))
 import HClean.Scan (directorySize)
 import HClean.Types (Target (..))
 
@@ -28,11 +30,13 @@ data Summary = Summary
   , summaryStats     :: [PatternStat]
   }
 
--- | Measure directory targets and compute the totals.
-summarize :: [Target] -> IO Summary
-summarize targets = do
+-- | Compute the totals, measuring directory targets when @measure@ is set.
+-- Measuring walks every matched directory, so callers skip it when no output
+-- shows sizes.
+summarize :: Bool -> [Target] -> IO Summary
+summarize measure targets = do
   sized <- forM targets $ \t ->
-    if targetIsDir t
+    if measure && targetIsDir t
       then (\n -> t { targetSize = n }) <$> directorySize (targetPath t)
       else pure t
   pure Summary
@@ -54,24 +58,36 @@ renderText showStats s = unlines $
        | showStats, st <- summaryStats s
        ]
 
--- | Machine readable report. @dryRun@ is echoed back in the summary object.
-renderJson :: Bool -> Summary -> String
-renderJson dryRun s = object
+-- | Line printed after removal: the count removed and the bytes freed.
+renderRemoved :: Int -> Integer -> String
+renderRemoved count freed =
+  "Removed " ++ show count ++ " item(s), " ++ formatSize freed ++ ".\n"
+
+-- | Machine readable report. @dryRun@ is echoed back in the summary object;
+-- @freed@ is the bytes removal freed.
+renderJson :: Bool -> [Failure] -> Integer -> Summary -> String
+renderJson dryRun failures freed s = object
   [ ("matches", array (map match (summaryTargets s)))
   , ("summary", object
       [ ("total_count", show (length (summaryTargets s)))
       , ("total_size", show (summaryTotalSize s))
       , ("total_size_human", jsonString (formatSize (summaryTotalSize s)))
+      , ("freed_size", show freed)
+      , ("freed_size_human", jsonString (formatSize freed))
       , ("dry_run", if dryRun then "true" else "false")
       ])
   , ("stats", array (map stat (summaryStats s)))
-  , ("failures", array [])
+  , ("failures", array (map failure failures))
   ]
   where
     match t = object
       [ ("path", jsonString (targetPath t))
       , ("size", show (targetSize t))
       , ("pattern", jsonString (targetPattern t))
+      ]
+    failure f = object
+      [ ("path", jsonString (targetPath (failureTarget f)))
+      , ("error", jsonString (failureError f))
       ]
     stat st = object
       [ ("pattern", jsonString (statPattern st))

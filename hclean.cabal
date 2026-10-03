@@ -56,12 +56,15 @@ test-suite hclean-test
   type:             exitcode-stdio-1.0
   hs-source-dirs:   test app
   main-is:          Main.hs
+  build-tool-depends: hclean:hclean
   other-modules:    CLI
                     Progress
                     CLISpec
                     ConfigSpec
+                    DeleteSpec
                     GlobSpec
                     Harness
+                    MainSpec
                     PresetSpec
                     ProgressSpec
                     ReportSpec
@@ -71,4 +74,5 @@ test-suite hclean-test
                   , hclean
                   , directory  >=1.3  && <1.4
                   , filepath   >=1.4  && <1.6
+                  , time       >=1.9  && <1.15
                   , unix       >=2.7  && <2.9
