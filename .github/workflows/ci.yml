@@ -1,0 +1,28 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    # Bounds a hung test; GitHub's default is six hours.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: haskell-actions/setup@v2
+        with:
+          ghc-version: '9.6'
+          cabal-version: latest
+      # Linux runs the non-UTF-8 file name test, which APFS cannot host.
+      - name: Test
+        run: make test
+      # The raw ghc build, with only the build-depends packages exposed.
+      - name: Build with make
+        run: make
