@@ -24,6 +24,7 @@ Every feature across hclean, oclean, rclean and cclean, as of 2026-10-03. [varia
 | | Confirmation prompt | line | line | single key | single key |
 | | Skip confirmation | yes | yes | yes | yes |
 | | Continue after a failed removal | yes | yes | yes | yes |
+| | Read-only directory removal | yes | yes | - | - |
 | | Identity check before removal | - | - | yes | yes |
 | | Descriptor-relative removal | - | - | yes (Unix) | yes |
 | | Home boundary | yes | yes | - | - |
@@ -42,7 +43,7 @@ Every feature across hclean, oclean, rclean and cclean, as of 2026-10-03. [varia
 | | Restore command | - | - | yes | yes |
 | | Bytes freed | yes | yes | yes | yes |
 | | Progress indicator | yes | yes | yes | yes |
-| | Colour | - | - | - | yes |
+| | Colour | - | yes | - | yes |
 | | Verbose log | yes | yes | yes | yes |
 | | Quiet mode | yes | yes | yes | - |
 | | Pattern listing | yes | yes | yes | - |
@@ -208,6 +209,14 @@ Every feature across hclean, oclean, rclean and cclean, as of 2026-10-03. [varia
 
 - implemented by: `src/HClean/Delete.hs` (hclean), `src/delete.ml` (oclean), `src/lib.rs` (rclean), `src/remove.cpp` (cclean) -- all four.
 
+### Read-only directory removal
+
+- description: A read-only directory inside a target is made writable so its entries can be removed.
+
+- purpose: Tools such as Go's module cache write read-only trees that would otherwise survive every run.
+
+- implemented by: `src/HClean/Delete.hs` via `removePathForcibly` (hclean), `src/delete.ml` (oclean) -- hclean and oclean.
+
 ### Identity check before removal
 
 - description: Removal refuses a target whose device and inode differ from what the scan recorded.
@@ -358,11 +367,11 @@ Every feature across hclean, oclean, rclean and cclean, as of 2026-10-03. [varia
 
 ### Colour
 
-- description: Directories, totals and failures are coloured, honouring `NO_COLOR` and `--color`.
+- description: Directories, totals and failures are coloured on a terminal, honouring `NO_COLOR` and `--color`.
 
 - purpose: Failures stand out in a long listing.
 
-- implemented by: `cli/terminal.cpp` (cclean) -- cclean only.
+- implemented by: `src/style.ml` and `bin/main.ml` (oclean), `cli/terminal.cpp` (cclean) -- oclean and cclean.
 
 ### Verbose log
 

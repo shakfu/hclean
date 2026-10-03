@@ -9,7 +9,7 @@ Facts below come from reading each tool's source, README and CHANGELOG on 2026-1
 | Tool | Language | Revision | Source lines | Tests |
 |-|-|-|-|-|
 | hclean | Haskell | 0.1.0 + Unreleased | 1.4k | 116 |
-| oclean | OCaml | `a133150` + Unreleased | 1.0k | 110 |
+| oclean | OCaml | `42c0b6a` + Unreleased | 1.0k | 114 |
 | cclean | C++17 | 0.3.0 (`0927f41`) | 5.0k | 416 unit checks, 234 CLI checks |
 | rclean | Rust | 0.5.0 (`59a0598`) + Unreleased | 2.5k | 134 |
 
@@ -53,7 +53,8 @@ The tools now form two groups. hclean and oclean keep the rclean 0.4 command lin
 | One removal fails | continues; exit 1 | continues; exit 1 | continues; exit 1 | continues; exit 1 |
 | Non-UTF-8 names | raw bytes in text; invalid JSON | same as hclean | U+FFFD in text and JSON; text quotes names and escapes control characters | `\xNN` in text; U+FFFD in JSON |
 | Parallelism | none | none | walk and removal | walk, sizing and removal; splits targets of 4,096+ entries |
-| Removal | `removePathForcibly` by path; clears read-only subdirectories | `lstat`/`unlink` by path | descriptor-relative `O_NOFOLLOW` walk, then dev/inode check (Unix) | descriptor-relative `O_NOFOLLOW` walk, then dev/inode check |
+| Removal | `removePathForcibly` by path | `lstat`/`unlink` by path | descriptor-relative `O_NOFOLLOW` walk, then dev/inode check (Unix) | descriptor-relative `O_NOFOLLOW` walk, then dev/inode check |
+| Read-only directory inside a target | made writable, then removed | made writable through a descriptor checked against `lstat`, if the user owns it | fails | fails |
 | Library | internal split, not installed | internal split, not installed | `lib.rs` | installable `libcclean.a` and headers |
 | Runtime dependencies | `base`, `directory`, `filepath`, `time`, `unix` | stdlib, `unix` | 12 crates | stdlib, pthreads |
 | CI | Linux, macOS | Linux (OCaml 4.14), macOS (OCaml 5) | Linux, macOS | Linux (gcc, clang), macOS |
@@ -71,6 +72,7 @@ Discovery differs more than any other area.
 | Global fallback | `hclean/config.toml` under `$XDG_CONFIG_HOME` or `~/.config` | `oclean/config.toml` under `$XDG_CONFIG_HOME` or `~/.config` | same, as `reclean/config.toml`; macOS falls back to `~/Library/Application Support` with a warning; Windows uses `%APPDATA%` | none |
 | Relative `path` resolves against | the file's directory; the working directory for the global file | the working directory | the working directory | no `path` key |
 | Files read per run | one | one | one | one |
+| `-w` writes to | `--path` | `--path` | working directory | no writer |
 | `--exclude` and the file's excludes | command line replaces | command line replaces | command line extends | command line replaces |
 | Unknown keys | ignored | ignored | error | error |
 | Missing keys | default | default | default; missing `patterns` means the built-in list | default; built-in patterns stay on through `defaults = true` |
